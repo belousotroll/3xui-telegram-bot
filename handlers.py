@@ -13,7 +13,7 @@ kb.add(types.InlineKeyboardButton(text="ℹ️ Информация об учё�
 @bot.message_handler(commands=["start"])
 def cmd_start(message: types.Message) -> None:
     user_id = message.chat.id
-    logger.info(f'User with id <{user_id}>')
+    logger.info(f'Incoming command /start from user_id={user_id}')
     bot.send_chat_action(message.chat.id, "typing")
     if add_client(user_id):
         bot.send_message(
@@ -30,7 +30,7 @@ def cmd_start(message: types.Message) -> None:
 @bot.callback_query_handler(func=lambda call: call.data == "get_qr")
 def send_qr(call: types.CallbackQuery) -> None:
     user_id = call.message.chat.id
-    logger.info(f'User with id <{user_id}>')
+    logger.info(f'Incoming command /get_qr from user_id={user_id}')
     img = qrcode.make(get_connection_string(user_id))
     buf = io.BytesIO()
     buf.name = 'qrcode.png'
@@ -41,6 +41,8 @@ def send_qr(call: types.CallbackQuery) -> None:
 
 @bot.callback_query_handler(func=lambda call: call.data == "get_info")
 def send_info(call: types.CallbackQuery) -> None:
+    user_id = call.message.chat.id
+    logger.info(f'Incoming command /get_info from user_id={user_id}')
     bot.send_message(call.message.chat.id, "ℹ️ Здесь будет информация об аккаунте.")
     bot.answer_callback_query(call.id)
 

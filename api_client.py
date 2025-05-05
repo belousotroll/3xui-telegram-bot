@@ -38,13 +38,13 @@ def list_inbounds(session: requests.Session) -> list:
     resp.raise_for_status()
     data = resp.json()
     inbounds = data.get("obj", [])
-    logger.info(f"Retrieved {len(inbounds)} inbounds")
+    logger.info(f"Found {len(inbounds)} active inbounds")
     return inbounds
 
 
 def get_first_inbound(session: requests.Session) -> int:
     inbound = list_inbounds(session)[0]
-    logger.info(f"Selected inbound_id={inbound['id']}")
+    logger.info(f"Using inbound with id={inbound['id']}")
     return inbound['id']
 
 
@@ -54,7 +54,7 @@ def add_client(user_id: int) -> bool:
         session = get_authorized_session()
         inbound_id = get_first_inbound(session)
 
-        logger.info(f'Adding user with user_id <{user_id}> to inbound <{inbound_id}>')
+        logger.info(f'Registering user with id={user_id} to inbound with id={inbound_id}')
 
         client_uuid = str(uuid.uuid4())
         client_info = {
@@ -81,10 +81,10 @@ def add_client(user_id: int) -> bool:
         resp.raise_for_status()
         data = resp.json()
         if data.get("success"):
-            logger.info(f"Client added for user {user_id}")
+            logger.info(f"User with id={user_id} has been registerated successfully")
             return True
         else:
-            logger.error(f"Error adding client: {data.get('msg')}")
+            logger.error(f"Registering user with id={user_id} to inbound with id={inbound_id} failed: {data.get('msg')}")
             return False
     except Exception as e:
         logger.error(f"Exception")
@@ -114,7 +114,7 @@ def get_connection_string(user_id: int) -> str | None:
             break
 
     if not found_client:
-        logger.warning(f"Client with email={target} not found")
+        logger.warning(f"User with id={target} not found")
         return None
 
     # Собираем параметры подключения из found_inbound и found_client
