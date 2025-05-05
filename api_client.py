@@ -10,11 +10,21 @@ import json
 import uuid
 import urllib3
 from logger import api_logger as logger
-
-from urllib.parse import urlparse, quote_plus
+from urllib.parse import quote_plus, quote, urlencode, urlparse
 from config import API_URL, API_AUTH_LOGIN, API_AUTH_PASSWORD, VERIFY
+from typing import Optional
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+def _ensure_dict(value):
+    """Если value — строка, раскодирует из JSON, иначе возвращает как есть."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse JSON: {value}")
+            return {}
+    return value or {}
 
 def get_authorized_session():
     session = requests.Session()
@@ -89,58 +99,77 @@ def add_client(user_id: int, username: str) -> bool:
         logger.error(f"Exception")
         return False
 
-
-def get_connection_string(user_id: int) -> str | None:
-    """
-    Формирует VLESS строку подключения для клиента с данным Telegram ID,
-    ищет клиента по полю email в настройках.
-    """
+def get_connection_string(user_id: int) -> Optional[str]:
     session = get_authorized_session()
-    inbounds = list_inbounds(session)
+    inbounds = list_inbounds(session)  # список dict, но внутри fields могут быть JSON-строками
 
     target = str(user_id)
-    found_client = None
-    found_inbound = None
     for inbound in inbounds:
-        settings = json.loads(inbound.get("settings", "{}"))
-        for client in settings.get("clients", []):
-            # Ищем клиента по email (Telegram ID хранится в email)
-            if client.get("tgId") == target:
-                found_client = client
-                found_inbound = inbound
-                break
-        if found_client:
-            break
+        # Грузим settings как dict
+        settings = _ensure_dict(inbound.get("settings", {}))
+        clients  = settings.get("clients", [])
+        for client in clients:
+            if client.get("tgId") != target:
+                continue
 
-    if not found_client:
-        logger.warning(f"User with id={target} not found")
-        return None
+            # нашли
+            client_id = client.get("id", "")
+            email     = client.get("email", "")
+            remark    = inbound.get("remark", "")
 
-    # Собираем параметры подключения из found_inbound и found_client
-    client_id   = found_client["id"]
-    email       = found_client.get("email", "")
-    remark      = found_inbound.get("remark", "")
-    host        = urlparse(API_URL).hostname or ""
-    port        = found_inbound.get("port", "")
-    stream      = json.loads(found_inbound.get("streamSettings", "{}"))
-    reality     = stream.get("realitySettings", {})
+            protocol = inbound.get("protocol", "")
 
-    public_key  = reality.get("publicKey", "")
-    fingerprint = reality.get("fingerprint", "")
-    sni         = reality.get("serverName") or (reality.get("serverNames", [""])[0])
-    short_id    = reality.get("shortId") or (reality.get("shortIds", [""])[0])
-    spider_x    = reality.get("spiderX", "")
+            # Парсим streamSettings
+            ss            = _ensure_dict(inbound.get("streamSettings", {}))
+            network       = ss.get("network", "")
+            security      = ss.get("security", "")
 
-    # Кодируем параметры для URL
-    pk_enc  = quote_plus(public_key, safe="")
-    fp_enc  = quote_plus(fingerprint, safe="")
-    sni_enc = quote_plus(sni or "", safe="")
-    sid_enc = quote_plus(short_id or "", safe="")
-    spx_enc = quote_plus(spider_x or "", safe="")
+            reality       = _ensure_dict(ss.get("realitySettings", {}))
+            real_settings = _ensure_dict(reality.get("settings", {}))
 
-    query = (
-        f"type=tcp&security=reality&pbk={pk_enc}&fp={fp_enc}"
-        f"&sni={sni_enc}&sid={sid_enc}&spx={spx_enc}&flow=xtls-rprx-vision"
-    )
-    url = f"vless://{client_id}@{host}:{port}?{query}#{remark}-{email}"
-    return url
+            public_key  = real_settings.get("publicKey", "")
+            fingerprint = real_settings.get("fingerprint", "")
+
+            # SNI
+            server_names = reality.get("serverNames", [])
+            sni = server_names[0] if server_names else real_settings.get("serverName", "")
+
+            # shortId
+            short_ids = reality.get("shortIds", [])
+            short_id  = short_ids[0] if short_ids else ""
+
+            spider_x = real_settings.get("spiderX", "")
+
+            # flow может лежать и в client
+            flow = client.get("flow") or ""
+
+            # Собираем query-параметры
+            params = {
+                "type":     network,
+                "security": security,
+                "pbk":      public_key,
+                "fp":       fingerprint,
+                "sni":      sni,
+                "sid":      short_id,
+                "spx":      spider_x,
+            }
+            if flow:
+                params["flow"] = flow
+
+            query = urlencode(params, quote_via=quote_plus, safe="")
+
+            # Собираем фрагмент remark-email
+            fragment = f"{remark}-{email}"
+            fragment_enc = quote(fragment, safe="")
+
+            # Хост и порт
+            host = urlparse(API_URL).hostname or ""
+            port = inbound.get("port", "")
+
+            conn_string = f"{protocol}://{client_id}@{host}:{port}?{query}#{fragment_enc}"
+            logger.debug(f"Connection string for user with id={user_id}: {conn_string}")
+
+            return conn_string
+
+    logger.warning(f"User with id={target} not found")
+    return None

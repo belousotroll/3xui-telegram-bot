@@ -32,11 +32,24 @@ def cmd_start(message: types.Message) -> None:
 def send_qr(call: types.CallbackQuery) -> None:
     user_id = call.message.chat.id
     logger.info(f'Incoming command /get_qr from user_id={user_id}')
-    img = qrcode.make(get_connection_string(user_id))
+
+    conn_str = get_connection_string(user_id)
+    if conn_str is None:
+        bot.send_message(
+            call.message.chat.id,
+            "❗ Не удалось найти параметры подключения. "
+            "Возможно, вы ещё не зарегистрированы в системе."
+        )
+        bot.answer_callback_query(call.id)
+        return
+
+    # Генерируем QR-код из полученной строки
+    img = qrcode.make(conn_str)
     buf = io.BytesIO()
     buf.name = 'qrcode.png'
     img.save(buf, 'PNG')
     buf.seek(0)
+
     bot.send_photo(call.message.chat.id, photo=buf)
     bot.answer_callback_query(call.id)
 
