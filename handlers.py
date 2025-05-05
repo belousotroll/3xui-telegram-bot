@@ -13,9 +13,10 @@ kb.add(types.InlineKeyboardButton(text="ℹ️ Информация об учё�
 @bot.message_handler(commands=["start"])
 def cmd_start(message: types.Message) -> None:
     user_id = message.chat.id
-    logger.info(f'Incoming command /start from user_id={user_id}')
+    username = message.from_user.username or "[[unknown]]"
+    logger.info(f'Incoming command /start from user_id={user_id} and username={username}')
     bot.send_chat_action(message.chat.id, "typing")
-    if add_client(user_id):
+    if add_client(user_id, username):
         bot.send_message(
             message.chat.id,
             "✅ Вы успешно зарегистрированы! Выберите действие ниже:",

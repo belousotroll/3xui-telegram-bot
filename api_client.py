@@ -48,7 +48,7 @@ def get_first_inbound(session: requests.Session) -> int:
     return inbound['id']
 
 
-def add_client(user_id: int) -> bool:
+def add_client(user_id: int, username: str) -> bool:
     """Добавляет клиента в первый inbound по Telegram ID"""
     try:
         session = get_authorized_session()
@@ -56,12 +56,11 @@ def add_client(user_id: int) -> bool:
 
         logger.info(f'Registering user with id={user_id} to inbound with id={inbound_id}')
 
-        client_uuid = str(uuid.uuid4())
         client_info = {
             "clients": [{
-                "id": client_uuid,
+                "id": str(user_id),
                 "flow": "xtls-rprx-vision",
-                "email": str(user_id),
+                "email": username,
                 "limitIp": 0,
                 "totalGB": 0,
                 "expiryTime": 0,
@@ -106,7 +105,7 @@ def get_connection_string(user_id: int) -> str | None:
         settings = json.loads(inbound.get("settings", "{}"))
         for client in settings.get("clients", []):
             # Ищем клиента по email (Telegram ID хранится в email)
-            if client.get("email") == target:
+            if client.get("tgId") == target:
                 found_client = client
                 found_inbound = inbound
                 break
