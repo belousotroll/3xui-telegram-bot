@@ -1,13 +1,5 @@
-"""
-Логика работы с API 3X-UI:
- - Авторизация (login)
- - Список inbound-ов
- - Добавление клиента
- - Получение строки подключения VLESS
-"""
 import requests
 import json
-import uuid
 import urllib3
 from logger import api_logger as logger
 from urllib.parse import quote_plus, quote, urlencode, urlparse
@@ -17,7 +9,7 @@ from typing import Optional
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def _ensure_dict(value):
-    """Если value — строка, раскодирует из JSON, иначе возвращает как есть."""
+    """Если value — строка, раскодирует из JSON, иначе возвращает как есть"""
     if isinstance(value, str):
         try:
             return json.loads(value)
@@ -105,21 +97,18 @@ def get_connection_string(user_id: int) -> Optional[str]:
 
     target = str(user_id)
     for inbound in inbounds:
-        # Грузим settings как dict
         settings = _ensure_dict(inbound.get("settings", {}))
         clients  = settings.get("clients", [])
         for client in clients:
             if client.get("tgId") != target:
                 continue
 
-            # нашли
             client_id = client.get("id", "")
             email     = client.get("email", "")
             remark    = inbound.get("remark", "")
 
             protocol = inbound.get("protocol", "")
 
-            # Парсим streamSettings
             ss            = _ensure_dict(inbound.get("streamSettings", {}))
             network       = ss.get("network", "")
             security      = ss.get("security", "")
